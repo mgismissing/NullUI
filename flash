@@ -1,0 +1,7 @@
+#!/bin/bash
+
+cleanup
+adb shell rm -rf /sdcard/tmp/src &&
+adb shell rm -rf /sdcard/NullUI &&
+adb push src /sdcard/tmp &&
+adb shell mv /sdcard/tmp/src /sdcard/NullUI

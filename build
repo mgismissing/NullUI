@@ -1,0 +1,10 @@
+#!/bin/bash
+
+zpy src/desktop.z bin/desktop.py &&
+zpy src/android.z bin/android.py &&
+cp -v src/nullui.py bin/ &&
+cp -v src/mouse.py bin/ &&
+cp -v src/cmp.py bin/ &&
+cp -v src/specials.py bin/ &&
+cp -v src/cooltext.py bin/ &&
+cleanup
