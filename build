@@ -1,5 +1,6 @@
 #!/bin/bash
 
+mkdir bin &&
 cp -vr src/img bin/ &&
 cp -vr src/plugin bin/ &&
 cp -v src/nullui.py bin/ &&
