@@ -16,9 +16,9 @@ class CMPImageFlags:
             chr(
                 int.from_bytes(b[2:6], byteorder="big") if (b[0] & 0x04)
                 else (int.from_bytes(b[2:4], byteorder="big") if (b[0] & 0x02)
-                else b[2])) if (b[0] & 0x08)
-                else None
-            )
+                else b[2])
+            ) if (b[0] & 0x08) else None
+        )
 
 class CMPImage:
     def __init__(self, filename: str):

@@ -1,13 +1,8 @@
 #!/bin/bash
 
-mkdir bin
+rm -rfv bin
+mkdir -v bin &&
 cp -vr src/img bin/ &&
 cp -vr src/plugin bin/ &&
-cp -v src/nullui.py bin/ &&
-cp -v src/mouse.py bin/ &&
-cp -v src/cmp.py bin/ &&
-cp -v src/specials.py bin/ &&
-cp -v src/cooltext.py bin/ &&
-zpy src/desktop.z bin/desktop.py &&
-zpy src/android.z bin/android.py &&
+zpy nullui android desktop src bin &&
 cleanup

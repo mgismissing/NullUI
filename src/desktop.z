@@ -1,60 +1,45 @@
-use nullui as nui
+use PackageManager                      from android
+use run                                 from android
+use colorama        as c
+use nullui          as nui
 use sys
 use os
-use make_printable from specials
-use CMPImage from cmp
-use cooltext as ct
 
-use time
+c.init!
 
-firsttime = True
-running = True
+apm = PackageManager!
 
 with nui.Screen! as scr
-    with nui.MouseHandler! as mouse
-        size = os.get_terminal_size!
+    size = os.get_terminal_size!
+    buf = ""
+    apps = apm.list!
+    while True
+        scr.clear!
+        scr.print(c.Fore.LIGHTWHITE_EX)
+        scr.print_at(1, 1, "> "+buf+("▏" if #buf<16 else "█"))
 
-        def settings_button_onclick(b: {nui.Button}, x: int, y: int): None
-            pass
-        .
-
-        def exit_button_onclick(b: {nui.Button}, x: int, y: int): None
-            global running; running = False
-        .
-
-        scr \
-            + (cmdbuf_label     := nui.Label(1, size.lines, size.columns, 1, "")) \
-            + (desktop_box      := nui.Box(1, 2, size.columns-2, size.lines-4, True, nui.Screen.rounded_box)) \
-            + (quickbar_buttons := nui.ButtonGroup(size.columns-10, 3, nui.Screen.connected_sep, \
-                + (settings_button  := nui.Button(0, 0, 3, 1, " 󰖷 ", nui.Screen.rounded_box, settings_button_onclick)) \
-                + (exit_button      := nui.Button(0, 0, 3, 1, " 󰖭 ", nui.Screen.rounded_box, exit_button_onclick)))) \
-            + (mousecur         := nui.Label(1, 1, 1, 1, "🮰"))
-        
-        cmdbuf = ""
-        max_cmdbuf = 16
-        while running
-            cmdvalid = False
-            scr.reset_buf!
-            if not firsttime
-                char = make_printable(sys.stdin.read(1))
-                cmdbuf = ($+char)[:max_cmdbuf]
-                cmdmouse = scr.handle_mouse(cmdbuf, mouse)
-                if cmdmouse
-                    mousecur.x, mousecur.y = cmdmouse.x, cmdmouse.y
-                    cmdbuf = ""
-                .elif cmdbuf == "exit"
-                    cmdbuf = ""
-                    running = False
-                .elif char == "␍"
-                    cmdbuf = ""
-                .elif char == "␡"
-                    cmdbuf = $[:(-2 if $[-1] == "␡" else -1)]
-                .
+        fapps = [,]
+        if ["ls", "rb"] has buf; {fapps}<-c.Fore.LIGHTMAGENTA_EX+"Run macro";.
+        for app in apps
+            for part in (app as str).split(".")
+                if part.startswith(buf); {fapps}<-app; break;.
             .
+        .
 
-            cmdbuf_label.text = (cmdbuf + ("▏" if #cmdbuf < max_cmdbuf else "█")).ljust(max_cmdbuf+1, " ") + ct.sevenseg(max_cmdbuf-#cmdbuf).rjust(2, " ")
-            scr.show!
-            firsttime = False
+        scr.print_at(1, 2, c.Fore.LIGHTGREEN_EX+("\r\n"+c.Fore.LIGHTWHITE_EX).join((app as str for app in fapps[:8])))
+
+        scr.flush!
+        char = sys.stdin.read(1)
+        if (ord(char) between ord("a"), ord("z")) or char == "."; buf = ($+char)[:16]
+        .elif char == "\x7F"; buf = $[:-1];
+        .elif char == "\x03"; break;
+        .elif char == "\x0D"
+            match buf
+                case "ls"; run("am start -a android.settings.APPLICATION_SETTINGS");.
+                case "rb"; run("su -c stop && su -c start");.
+                case _; if #fapps > 0; fapps[0].open!;.;.
+            .
+            buf = ""
         .
     .
 .

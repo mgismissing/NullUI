@@ -1,0 +1,37 @@
+use sys
+use re
+
+class MouseData
+    def __init__(self, btn: int, x: int, y: int, pressed: bool): None
+        @<-btn
+        @<-x
+        @<-y
+        @<-pressed
+    .
+.
+
+class MouseHandler
+    def __enter__(self)
+        === Enable mouse ===
+        sys.stdout.write("\x1b[?1000h\x1b[?1006h")
+        sys.stdout.flush!
+        <- self
+    .
+    def __exit__(self, exc_type, exc_value, exc_tb): bool
+        === Disable mouse ===
+        sys.stdout.write("\x1b[?1000l\x1b[?1006l")
+        sys.stdout.flush!
+        <- False
+    .
+    def parse(self, data: str): MouseData | None
+        matched = re.`match`(r"␛\[<(\d+);(\d+);(\d+)([mM])", data)
+        if matched
+            btn, x, y, event_type = matched.groups!
+            btn to int; x to int; y to int
+            down = event_type == "M"
+
+            <- MouseData(btn, x, y, down)
+        .
+        <- None
+    .
+.

@@ -1,0 +1,433 @@
+use sys
+use os
+use tty
+use MouseHandler    from mouse
+use MouseData       from mouse
+use CMPImage        from cmp
+use Literal         from typing
+use Callable        from typing
+use Any             from typing
+use Self            from typing
+
+class Margin
+    def __init__(self, ml: int, mt: int, mr: int, mb: int): None
+        @<-ml
+        @<-mt
+        @<-mr
+        @<-mb
+    .
+.
+
+class Style
+    class Box
+        def __init__(self, tl: str, t: str, tr: str, l: str, r: str, bl: str, b: str, br: str): None
+            @<-tl
+            @<-t
+            @<-tr
+            @->top = @->tl + @->t + @->tr
+            @<-l
+            @<-r
+            @->center = @->l + " " + @->r
+            @<-bl
+            @<-b
+            @<-br
+            @->bottom = @->bl + @->b + @->br
+            @->str = @->top + @->center + @->bottom
+        .
+        def __str__(self): str; <- @->str;.
+        def __repr__(self): str; <- @->__str__!;.
+    .
+    class Sep
+        def __init__(self, t: str, c: str, b: str): None
+            @<-t
+            @<-c
+            @<-b
+            @->str = @->t + @->c + @->b
+        .
+        def __str__(self): str; <- @->str;.
+        def __repr__(self): str; <- @->__str__!;.
+    .
+.
+
+class Widget
+    def __init__(self): None
+        pass
+    .
+
+    def __render__(self, scr: Any): None
+        pass
+    .
+
+    def __add__(self, w: Any); <- [self, w,];.
+    def __radd__(self, l: Any); <- l + [self,];.
+    def __or__(self, w: Any); <- @->__add__(w);.
+    def __ror__(self, l: Any); <- @->__radd__(l);.
+    def __pos__(self); <- [self,];.
+.
+
+class MovableWidget from Widget
+    def __init__(self, x: int, y: int): None
+        @^!
+        @<-x
+        @<-y
+    .
+.
+
+class SizableWidget from MovableWidget
+    margin = Margin(0, 0, 0, 0)
+    def __init__(self, x: int, y: int, w: int, h: int): None
+        @^(x, y)
+        @<-w
+        @<-h
+    .
+.
+
+class TypeableWidget from SizableWidget
+    margin = Margin(0, 0, 1, 1)
+
+    def __init__(self, x: int, y: int, w: int, h: int, onkeypress: Callable({[Self, str,]}, None)): None
+        @^(x, y, w, h)
+        @->__onkeypress__ = onkeypress
+    .
+.
+
+class ClickableWidget from SizableWidget
+    margin = Margin(0, 0, 1, 1)
+
+    def __init__(self, x: int, y: int, w: int, h: int, onclick: Callable({[Self, int, int,]}, None)): None
+        @^(x, y, w, h)
+        @->__onclick__ = onclick
+    .
+.
+
+def margin_to_rect(widget: SizableWidget): tuple(int, int, int, int)
+    <- [
+        widget.x-widget.margin.ml,
+        widget.x+widget.w+widget.margin.mr-1,
+        widget.y-widget.margin.mt,
+        widget.y+widget.h+widget.margin.mb-1
+    ]
+.
+
+def in_bounds(bounds: tuple(int, int, int, int), x: int, y: int): bool
+    <- (x between bounds[0], bounds[1]) and (y between bounds[2], bounds[3])
+.
+
+def in_widget_bounds(widget: SizableWidget, x: int, y: int): bool
+    <- in_bounds(margin_to_rect(widget), x, y)
+.
+
+class Screen
+    default_color = ""
+    default_buf = ""
+    square_box = Style.Box("┌", "─", "┐", "│", "│", "└", "─", "┘")
+    null_box = Style.Box("🮣", "─", "┐", "│", "│", "└", "─", "🮠")
+    chamfered_box = Style.Box("🮣", "─", "🮢", "│", "│", "🮡", "─", "🮠")
+    rounded_box = Style.Box("╭", "─", "╮", "│", "│", "╰", "─", "╯")
+
+    connected_sep = Style.Sep("┬", "│", "┴")
+    notch_sep = Style.Sep("│", "│", "│")
+    dashed_notch_sep = Style.Sep("╎", "╎", "╎")
+    dotted_notch_sep = Style.Sep("┊", "┊", "┊")
+
+    def __enter__(self, autoclear: bool = True)
+        @->autoclear = True
+        sys.stdout.write("\033[?25l\033[2J")
+        sys.stdout.flush!
+        @->tty_fileno = sys.stdin.fileno!
+        @->tty_default = tty.tcgetattr(@->tty_fileno)
+        tty.setraw(@->tty_fileno)
+        @->reset_buf!
+        @->children = [,]
+        <- self
+    .
+    def __exit__(self, exc_type, exc_value, exc_tb): bool
+        tty.tcsetattr(@->tty_fileno, tty.TCSADRAIN, @->tty_default)
+        sys.stdout.write("\033[?25h\033[2J\033[H")
+        sys.stdout.flush!
+        <- False
+    .
+        
+    def reset_buf(self): None
+        @->buf = ("\033[2J" if @->autoclear else "") + "\033[H" + @->default_buf
+    .
+
+    def move(self, x: int, y: int): None
+        @->buf += "\033[" + y as str + ";" + x as str + "H"
+    .
+
+    def home(self): None
+        @->move(1, 1)
+    .
+    
+    def print(self, s: str)
+        @->buf += s
+    .
+    def print_at(self, x: int, y: int, s: str): None
+        @->move(x, y)
+        @->print(s)
+    .
+    
+    def draw_box(self, x: int, y: int, w: int, h: int, box_style: {Style.Box}): None
+        @->print_at(x, y, box_style.tl+box_style.t*w+box_style.tr)
+        for oy in {->h}
+            @->print_at(x, y+oy+1, box_style.l)
+            @->print_at(x+w+1, y+oy+1, box_style.r)
+        .
+        @->print_at(x, y+h+1, box_style.bl+box_style.b*w+box_style.br)
+    .
+    def draw_filled_box(self, x: int, y: int, w: int, h: int, box_style: {Style.Box}): None
+        @->print_at(x, y, box_style.tl+box_style.t*w+box_style.tr)
+        for oy in {->h}
+            @->print_at(x, y+oy+1, box_style.l+" "*w+box_style.r)
+        .
+        @->print_at(x, y+h+1, box_style.bl+box_style.b*w+box_style.br)
+    .
+    
+    def draw_open_box(self, x: int, y: int, w: int, h: int, left: bool, top: bool, right: bool, bottom: bool, box_style: {Style.Box}): None
+        if left and top and right and bottom; @->draw_box(x, y, w, h, box_style);.
+        if top; @->print_at(x, y+(0 if left else 1), (box_style.tl if left else "")+box_style.t*w+(box_style.tr if right else ""));.
+        for oy in {->h}
+            if left; @->print_at(x, y+oy+1, box_style.l);.
+            if right; @->print_at(x+w+1, y+oy+1, box_style.r);.
+        .
+        if bottom; @->print_at(x, y+h+1+(0 if left else 1), (box_style.bl if left else "")+box_style.b*w+(box_style.br if right else ""));.
+    .
+    def draw_open_filled_box(self, x: int, y: int, w: int, h: int, left: bool, top: bool, right: bool, bottom: bool, box_style: {Style.Box}): None
+        if left and top and right and bottom; @->draw_box(x, y, w, h, box_style);.
+        @->print_at(x, y, (box_style.tl if left else " ")+(box_style.t if top else " ")*w+(box_style.tr if right else " "))
+        for oy in {->h}
+            @->print_at(x, y+oy+1, (box_style.l if left else " ")+" "*w+(box_style.r if right else " "))
+        .
+        @->print_at(x, y+h+1, (box_style.bl if left else " ")+(box_style.b if bottom else " ")*w+(box_style.br if right else " "))
+    .
+
+    def handle_mouse(self, data: str, mouse: MouseHandler): MouseData | None
+        out = mouse.parse(data)
+        if out
+            for child in filter(isinstance(widget, ClickableWidget) <- (widget), @->children)
+                if (not out.pressed) and (out.btn == 0) and in_widget_bounds(child, out.x, out.y)
+                    child.__onclick__(child, out.x - child.x, out.y - child.y)
+                    break
+                .
+            .
+        .
+        <- out
+    .
+
+    def handle_keypress(self, key: str): None
+        for child in filter(isinstance(widget, TypeableWidget) <- (widget), @->children)
+            child.__onkeypress__(child, key)
+            break
+        .
+    .
+    
+    def __render__(self): None
+        for child in @->children
+            child.__render__(self)
+        .
+    .
+    
+    def add_child(self, w: Widget | list(Widget))
+        wl = (w if isinstance(w, list) else [w,])
+        for widget in wl
+            @->children.append(widget)
+        .
+        <- self
+    .
+    
+    def __add__(self, w: Widget); <- @->add_child(w);.
+    def __iadd__(self, w: Widget); <- @->__add__(w);.
+    def __or__(self, w: Widget); <- @->__add__(w);.
+
+    def show(self): None
+        @->__render__!
+        sys.stdout.write(@->buf)
+        sys.stdout.flush!
+    .
+.
+
+class Label from SizableWidget
+    def __init__(self, x: int, y: int, w: int, h: int, text: str)
+        @^(x, y, w, h)
+        @<-text
+    .
+    
+    def __render__(self, scr: Screen)
+        for y at l in {@->y <-> @->y+@->h}
+            scr.print_at(@->x, y, @->text[@->w*l:@->w*(l+1)].ljust(@->w, " "))
+        .
+    .
+.
+
+class ProgressBar from Label
+    def __init__(self, x: int, y: int, w: int, h: int, progress: int = 0, max_progress: int = 100): None
+        @^(x, y, w, h, "")
+        @->progress = progress
+        @->max_progress = max_progress
+    .
+
+    def __render__(self, scr: Screen): None
+        for y in {@->y <-> @->y+@->h}
+            blocks = (@->w * 8 * (@->progress / @->max_progress)) as int
+            s = ""
+            while blocks >= 8
+                s += "█"
+                blocks -= 8
+            .
+            match blocks
+                case 7; s += "▉";.
+                case 6; s += "▊";.
+                case 5; s += "▋";.
+                case 4; s += "▌";.
+                case 3; s += "▍";.
+                case 2; s += "▎";.
+                case 1; s += "▏";.
+            .
+            scr.print_at(@->x, y, s.ljust(@->w, " ")[:@->w])
+        .
+    .
+.
+
+class Box from SizableWidget
+    def __init__(self, x: int, y: int, w: int, h: int, filled: bool, box_style: {Style.Box}): None
+        @^(x, y, w, h)
+        @<-filled
+        @<-box_style
+    .
+    
+    def __render__(self, scr: Screen): None
+        if @->filled
+            scr.draw_filled_box(@->x, @->y, @->w, @->h, @->box_style)
+        .else
+            scr.draw_box(@->x, @->y, @->w, @->h, @->box_style)
+        .
+    .
+.
+
+class Image from MovableWidget
+    def __init__(self, x: int, y: int, image: CMPImage): None
+        @^(x, y)
+        @<-image
+    .
+    
+    def __render__(self, scr: Screen): None
+        for l at y in self.image.read!.splitlines!
+            for c at x in l
+                if c != "\x00"
+                    scr.print_at(@->x+x, @->y+y, c)
+                .
+            .
+        .
+    .
+.
+
+class ClickableLabel from ClickableWidget
+    margin = Margin(0, 0, 0, 0)
+
+    def __init__(self, x: int, y: int, w: int, h: int, text: str, onclick: Callable({[Self, int, int,]}, None)): None
+        @^(x, y, w, h, onclick)
+        @<-text
+    .
+    
+    def __render__(self, scr: Screen): None
+        for y at l in {@->y <-> @->y+@->h}
+            scr.print_at(@->x, y, @->text[@->w*l:@->w*(l+1)].ljust(@->w, " "))
+        .
+    .
+.
+
+class Button from ClickableLabel
+    margin = Margin(0, 0, 2, 2)
+
+    def set_side(self, side: Literal({"l"}, {"c"}, {"r"}, None)): None
+        @<-side
+        match side
+            case "l" ; @->margin = Margin(0, 0, 1, 2);.
+            case "c" ; @->margin = Margin(-1, 0, 1, 2);.
+            case "r" ; @->margin = Margin(-1, 0, 2, 2);.
+            case None; @->margin = Button.margin;.
+        .
+    .
+
+    def __init__(self, x: int, y: int, w: int, h: int, text: str, box_style: {Style.Box}, onclick: Callable({[Self, int, int,]}, None), side: Literal({"l"}, {"c"}, {"r"}, None) = None): None
+        @^(x, y, w, h, text, onclick)
+        @<-box_style
+        @->set_side(side)
+    .
+    
+    def __render__(self, scr: Screen): None
+        match @->side
+            case "l" ; scr.draw_open_filled_box(@->x, @->y, @->w, @->h, True, True, False, True, @->box_style);.
+            case "c" ; scr.draw_open_filled_box(@->x, @->y, @->w, @->h, False, True, False, True, @->box_style);.
+            case "r" ; scr.draw_open_filled_box(@->x, @->y, @->w, @->h, False, True, True, True, @->box_style);.
+            case None; scr.draw_filled_box(@->x, @->y, @->w, @->h, @->box_style);.
+        .
+        for y at l in {self.y <-> self.y+self.h}
+            scr.print_at(@->x+1, y+1, @->text[@->w*l:@->w*(l+1)].ljust(@->w, " "))
+        .
+    .
+.
+
+class ButtonGroup from ClickableWidget
+    def __init__(self, x: int, y: int, sep_style: {Style.Sep}, children: list(Button)): None
+        @<-sep_style
+
+        w = 0; h = 0
+        @<-children
+        for child at i in @->children
+            if child.h > h; h = child.h;.
+
+            child.x = x + w
+            child.y = y
+            child.set_side((None if #@->children == 1 else ("l" if i == 0 else ("r" if i == #self.children-1 else "c"))))
+            
+            w += margin_to_rect(child)[2] + 1
+        .
+        for child in @->children; child.h = h;.
+        h++
+
+        def clicked(self, x: int, y: int): None
+            for child in @->children
+                if in_widget_bounds(child, @->x+x, @->y+y)
+                    child.__onclick__(child, @->x+x-child.x+child.margin.ml, @->y+y-child.y+child.margin.mt)
+                    break
+                .
+            .
+        .
+        @^(x, y, w, h, clicked)
+    .
+    
+    def __render__(self, scr: Screen): None
+        for child in @->children
+            child.__render__(scr)
+        .
+        cx = 0
+        for child at i in @->children
+            if i < #@->children-1
+                cx += margin_to_rect(child)[2] + 1
+                scr.print_at(@->x+cx, @->y, @->sep_style.t)
+                scr.print_at(@->x+cx, @->y+1, @->sep_style.c)
+                scr.print_at(@->x+cx, @->y+2, @->sep_style.b)
+            .
+        .
+    .
+.
+
+class TextBox from TypeableWidget
+    def __init__(self, x: int, y: int, w: int, h: int = 1): None
+        @->text = ""
+        def keypress(self, c: str): None
+            @->text = ($+c)[:@->w]
+            @->text = $[:(-2 if c == "␡" else -1)]
+        .
+
+        @^(x, y, w, h, keypress)
+    .
+    
+    def __render__(self, scr: Screen): None
+        for y at l in {@->y <-> @->y+@->h}
+            scr.print_at(@->x, y, @->text[@->w*l:@->w*(l+1)].ljust(@->w, " "))
+        .
+    .
+.

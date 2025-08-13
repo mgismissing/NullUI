@@ -1,0 +1,28 @@
+use sys
+use tty
+
+class Screen
+    def __enter__(@)
+        sys.stdout.write("\033[?25l\033[2J\033[H")
+        sys.stdout.flush!
+        @.tty_fileno = sys.stdin.fileno!
+        @.tty_default = tty.tcgetattr(@.tty_fileno)
+        tty.setraw(@.tty_fileno)
+        @.buf = ""
+        <-@
+    .
+    def __exit__(@, exc_type, exc_value, exc_tb): bool
+        tty.tcsetattr(@.tty_fileno, tty.TCSADRAIN, @.tty_default)
+        sys.stdout.write("\033[?25h\033[2J\033[H")
+        sys.stdout.flush!
+        <-False
+    .
+
+    def move(@, x: int, y: int): None;              @.buf += "\033[" + y as str + ";" + x as str + "H";.
+    def home(@): None;                              @.buf += "\033[H";.
+    def clear(@): None;                             @.buf += "\033[2J";.
+    def print(@, s: str): None;                     @.buf += s;.
+    def print_at(@, x: int, y: int, s: str): None;  @.move(x, y); @.print(s);.
+
+    def flush(@): None;                             sys.stdout.write(@.buf); sys.stdout.flush!; @.buf = "";.
+.

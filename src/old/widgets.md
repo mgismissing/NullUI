@@ -4,10 +4,12 @@
 Widget
 └── MovableWidget
     ├── SizableWidget
+    │   ├── TypeableWidget
+    │   │   └── TextBox
     │   ├── ClickableWidget
-    │   │   ├── ButtonGroup
-    │   │   └── ClickableLabel
-    │   │       └── Button
+    │   │   ├── ClickableLabel
+    │   │   │   └── Button
+    │   │   └── ButtonGroup
     │   ├── Label
     │   │   └── ProgressBar
     │   └── Box
