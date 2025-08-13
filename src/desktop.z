@@ -30,7 +30,7 @@ with nui.Screen! as scr
 
         scr.flush!
         char = sys.stdin.read(1)
-        if (ord(char) between ord("a"), ord("z")) or char == "."; buf = ($+char)[:16]
+        if (ord(↓char) between ord("a"), ord("z")) or char == "."; buf = ($+char)[:16]
         .elif char == "\x7F"; buf = $[:-1];
         .elif char == "\x03"; break;
         .elif char == "\x0D"

@@ -31,7 +31,7 @@ class PackageManager
 
     def list(@): list(Package)
         out = [,]
-        pkgs = run("pm list packages").splitlines!
+        pkgs = run("cmd package list packages").splitlines!
         for pkg in pkgs; out.append(pkg.removeprefix("package:") as Package);.
         <- out
     .
